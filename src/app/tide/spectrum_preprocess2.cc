@@ -78,7 +78,7 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
   cache_end_ = MaxBin::Global().CacheBinEnd() * NUM_PEAK_TYPES;
 
   memset(peaks_, 0, sizeof(double) * MaxBin::Global().BackgroundBinEnd());
-
+  int largest_mz = 0;
   if (Params::GetBool("skip-preprocessing")) {
     for (int i = 0; i < spectrum.Size(); ++i) {
       double peak_location = spectrum.M_Z(i);
@@ -87,11 +87,17 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
         continue;
       }
       int mz = MassConstants::mass2bin(peak_location);
-      double intensity = spectrum.Intensity(i);
+      // Modified by AKF to handle peak intensities of negative values
+      double intensity = spectrum.Intensity(i) + 100000.0;
       if (intensity > peaks_[mz]) {
         peaks_[mz] = intensity;
       }
     }
+    //Added by AKF to to handle peak intensities of negative values
+    for (int ma = 0; ma < largest_mz; ++ma) {
+      if (peaks_[ma] != 0)
+        peaks_[ma] -= 100000.0;
+    }           
   } else {
     bool remove_precursor = Params::GetBool("remove-precursor-peak");
     double precursor_tolerance = Params::GetDouble("remove-precursor-tolerance");
@@ -99,7 +105,6 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
     int max_charge = spectrum.MaxCharge();
 
     // Fill peaks
-    int largest_mz = 0;
     double highest_intensity = 0;
     for (int i = spectrum.Size() - 1; i >= 0; --i) {
       double peak_location = spectrum.M_Z(i);
@@ -179,8 +184,10 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
     }
 #endif
   }
-  SubtractBackground(peaks_, max_mz_.BackgroundBinEnd());
-
+  if (Params::GetBool("cross-corr-penalty")) {  // Added by AKF
+    SubtractBackground(peaks_, max_mz_.BackgroundBinEnd());
+  }
+  
 #ifdef DEBUG
   if (debug)
     ShowPeaks();

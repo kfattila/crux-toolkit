@@ -833,6 +833,11 @@ Params::Params() : finalized_(false) {
     "Fast, but heuristic PSM score calibration[[html: as described in "
     "<a href=\"\">TBA</a>]].",
     "Available for tide-search", true);    
+ //Added by AKF
+  InitBoolParam("cross-corr-penalty", true,
+    "Applyies the cross-correlation penalty for XCorr[[html: as described in "
+    "<a href=\"\">TBA</a>]].",
+    "Available for tide-search", true);     
   InitStringParam("store-index", "",
     "When providing a FASTA file as the index, the generated binary index will be stored at "
     "the given path. This option has no effect if a binary index is provided as the index.",

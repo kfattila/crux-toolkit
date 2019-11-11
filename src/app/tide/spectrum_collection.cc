@@ -193,7 +193,7 @@ vector<double> Spectrum::CreateEvidenceVector(
   int numPeaks = Size();
   double experimentalMassCutoff = PrecursorMZ() * charge + 50.0;
   double maxIonMass = 0.0;
-  double maxIonIntens = 0.0;
+  double maxIonIntens = -1000000.0;  //Modified by AKF  
 
   // Find max ion mass and max ion intensity
   bool skipPreprocess = Params::GetBool("skip-preprocessing");
@@ -234,8 +234,7 @@ vector<double> Spectrum::CreateEvidenceVector(
       maxIonIntens = ionIntens;
     }
   }
-
-  // 10 bin intensity normalization 
+  // 10 region intensity normalization 
   int regionSelector = (int)floor(MassConstants::mass2bin(maxIonMass) / (double)NUM_SPECTRUM_REGIONS);
   vector<double> intensObs(maxPrecurMass, 0);
   vector<int> intensRegion(maxPrecurMass, -1);
@@ -244,7 +243,8 @@ vector<double> Spectrum::CreateEvidenceVector(
       continue;
     }
     double ionMass = M_Z(ion);
-    double ionIntens = Intensity(ion);
+    //Make the peak intesnitiy work with negative values. Modified by AKF
+    double ionIntens = Intensity(ion) + 100000.0;   
     int ionBin = MassConstants::mass2bin(ionMass);
     int region = (int)floor((double)(ionBin) / (double)regionSelector);
     if (region >= NUM_SPECTRUM_REGIONS) {
@@ -255,46 +255,55 @@ vector<double> Spectrum::CreateEvidenceVector(
       intensObs[ionBin] = ionIntens;
     }
   }
-
-  maxIonIntens = sqrt(maxIonIntens);
-  for (vector<double>::iterator i = intensObs.begin(); i != intensObs.end(); i++) {
-    *i = sqrt(*i);
-    if (*i <= 0.05 * maxIonIntens) {
-      *i = 0.0;
+  //Added by AKF
+  for (int ma = 0; ma < maxPrecurMass; ma++) {
+    if (intensObs[ma] != 0)
+      intensObs[ma] -= 100000.0;
+  }  
+  if (!skipPreprocess) {
+    maxIonIntens = sqrt(maxIonIntens);
+    for (vector<double>::iterator i = intensObs.begin(); i != intensObs.end(); i++) {
+      *i = sqrt(*i);
+      if (*i <= 0.05 * maxIonIntens) {
+        *i = 0.0;
+      }
+    }
+    vector<double> maxRegion(NUM_SPECTRUM_REGIONS, 0);
+    for (int i = 0; i < maxPrecurMass; i++) {
+      int reg = intensRegion[i];
+      if (reg >= 0 && maxRegion[reg] < intensObs[i]) {
+        maxRegion[reg] = intensObs[i];
+      }
+    }
+    for (int i = 0; i < maxPrecurMass; i++) {
+      int reg = intensRegion[i];
+      if (reg >= 0 && maxRegion[reg] > 0.0) {
+        intensObs[i] *= (maxIntensPerRegion / maxRegion[reg]);
+      }
+    }
+  } else {
+    for (int ma = 0; ma < maxPrecurMass; ma++) {
+      intensObs[ma] *= maxIntensPerRegion/maxIonIntens;  //Intensities should not be higher than 50.0
+    }      
+  }
+  if (Params::GetBool("cross-corr-penalty")) {  // Added by AKF
+    // ***** Adapted from tide/spectrum_preprocess2.cc.
+    // TODO replace, if possible, with call to
+    // static void SubtractBackground(double* observed, int end).
+    // Note numerous small changes from Tide code.
+    vector<double> partial_sums;
+    partial_sums.reserve(maxPrecurMass);
+    double total = 0.0;
+    for (vector<double>::const_iterator i = intensObs.begin(); i != intensObs.end(); i++) {
+      partial_sums.push_back(total += *i);
+    }
+    const double multiplier = 1.0 / (MAX_XCORR_OFFSET * 2.0 + 1.0);
+    for (int i = 0; i < maxPrecurMass; ++i) {
+      int right = std::min(maxPrecurMass - 1, i + MAX_XCORR_OFFSET);
+      int left = std::max(0, i - MAX_XCORR_OFFSET - 1);
+      intensObs[i] -= multiplier * (partial_sums[right] - partial_sums[left]);
     }
   }
-
-  vector<double> maxRegion(NUM_SPECTRUM_REGIONS, 0);
-  for (int i = 0; i < maxPrecurMass; i++) {
-    int reg = intensRegion[i];
-    if (reg >= 0 && maxRegion[reg] < intensObs[i]) {
-      maxRegion[reg] = intensObs[i];
-    }
-  }
-  for (int i = 0; i < maxPrecurMass; i++) {
-    int reg = intensRegion[i];
-    if (reg >= 0 && maxRegion[reg] > 0.0) {
-      intensObs[i] *= (maxIntensPerRegion / maxRegion[reg]);
-    }
-  }
-
-  // ***** Adapted from tide/spectrum_preprocess2.cc.
-  // TODO replace, if possible, with call to
-  // static void SubtractBackground(double* observed, int end).
-  // Note numerous small changes from Tide code.
-  vector<double> partial_sums;
-  partial_sums.reserve(maxPrecurMass);
-  double total = 0.0;
-  for (vector<double>::const_iterator i = intensObs.begin(); i != intensObs.end(); i++) {
-    partial_sums.push_back(total += *i);
-  }
-  const double multiplier = 1.0 / (MAX_XCORR_OFFSET * 2.0 + 1.0);
-  for (int i = 0; i < maxPrecurMass; ++i) {
-    int right = std::min(maxPrecurMass - 1, i + MAX_XCORR_OFFSET);
-    int left = std::max(0, i - MAX_XCORR_OFFSET - 1);
-    intensObs[i] -= multiplier * (partial_sums[right] - partial_sums[left]);
-  }
-
   bool flankingPeaks = Params::GetBool("use-flanking-peaks");
   bool nlPeaks = Params::GetBool("use-neutral-loss-peaks");
   int binFirst = MassConstants::mass2bin(30);

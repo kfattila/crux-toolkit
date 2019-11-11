@@ -1518,6 +1518,7 @@ vector<string> TideSearchApplication::getOptions() const {
     "auto-precursor-window",
     "compute-sp",
     "concat",
+    "cross-corr-penalty",  //Added by AKF
     "deisotope",
     "elution-window-size",
     "exact-p-value",
