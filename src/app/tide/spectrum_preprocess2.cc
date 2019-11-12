@@ -86,6 +86,9 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
         (*num_range_skipped)++;
         continue;
       }
+      if (peak_location > largest_mz) {
+          largest_mz = peak_location;
+      }
       int mz = MassConstants::mass2bin(peak_location);
       // Modified by AKF to handle peak intensities of negative values
       double intensity = spectrum.Intensity(i) + 100000.0;
