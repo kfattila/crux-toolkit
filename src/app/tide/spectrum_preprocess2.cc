@@ -80,6 +80,13 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
   memset(peaks_, 0, sizeof(double) * MaxBin::Global().BackgroundBinEnd());
   int largest_mz = 0;
   if (Params::GetBool("skip-preprocessing")) {
+    FILE* fp = fopen("raw_spectra", "w");
+    for (int i = 0; i < spectrum.Size(); ++i) {
+      double peak_location = spectrum.M_Z(i);
+      double intensity = spectrum.Intensity(i);
+      fprintf(fp, "%lf\t%lf", peak_location, intensity);
+    }
+    fclose(fp);
     for (int i = 0; i < spectrum.Size(); ++i) {
       double peak_location = spectrum.M_Z(i);
       if (peak_location >= experimental_mass_cut_off) {
@@ -97,10 +104,15 @@ void ObservedPeakSet::PreprocessSpectrum(const Spectrum& spectrum, int charge,
       }
     }
     //Added by AKF to to handle peak intensities of negative values
+    fp = fopen("discrete_spectra", "w");
     for (int ma = 0; ma < largest_mz; ++ma) {
       if (peaks_[ma] != 0)
         peaks_[ma] -= 100000.0;
+        fprintf(fp, "%d\t%lf", ma, peaks_[ma]);        
     }           
+    fclose(fp);
+    exit(0);
+    
   } else {
     bool remove_precursor = Params::GetBool("remove-precursor-peak");
     double precursor_tolerance = Params::GetDouble("remove-precursor-tolerance");
